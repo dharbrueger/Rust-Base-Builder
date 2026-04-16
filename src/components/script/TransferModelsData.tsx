@@ -13,7 +13,9 @@ import { useAudioPlayer } from "./AudioPlayer.tsx";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheck, faCopy, faDownload, faEraser, faFile, faKeyboard, faUpload, faRobot } from "@fortawesome/free-solid-svg-icons"; //prettier-ignore
 
-const OPTIMIZER_URL = (import.meta as any).env?.VITE_OPTIMIZER_URL ?? "http://localhost:3001";
+const OPTIMIZER_URL: string =
+  (import.meta.env as Record<string, string | undefined>)["VITE_OPTIMIZER_URL"] ??
+  "http://localhost:3001";
 
 interface ModelData {model: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }} //prettier-ignore
 interface TransferModelsDataProps {canvas_models_data: { [id: string]: ModelData }, data_index: number} //prettier-ignore
@@ -181,7 +183,15 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
     dispatch(set_prebuilt_base_objects_set([]));
     set_loading_bar_info("Import the base");
     set_transfer_models_data_mode(mode);
-    set_loading_bar_info(`${mode === "import" ? "Import" : mode === "export" ? "Export" : "AI Optimizer"} the base`);
+    let modeLabel: string;
+    if (mode === "import") {
+      modeLabel = "Import";
+    } else if (mode === "export") {
+      modeLabel = "Export";
+    } else {
+      modeLabel = "AI Optimizer";
+    }
+    set_loading_bar_info(`${modeLabel} the base`);
     playSound("menu_sound");
   }
 

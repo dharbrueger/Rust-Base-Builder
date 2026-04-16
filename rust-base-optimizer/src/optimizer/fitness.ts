@@ -35,8 +35,6 @@ export function totalBuildCostSulfur(spec: BaseSpec): number {
  * for free — so the fitness function applies a heavy per-face penalty.
  */
 export function countOpenExteriorFaces(spec: BaseSpec): number {
-  const TOLERANCE = 0.3;
-
   // Index square foundations by rounded (x, z) position.
   const foundations = spec.objects.filter(
     (o) => o.modelType === "foundation" && o.shape === "square"
@@ -98,9 +96,6 @@ export function countOpenExteriorFaces(spec: BaseSpec): number {
       }
     }
   }
-
-  // Suppress unused variable warning from the TOLERANCE const.
-  void TOLERANCE;
 
   return openFaces;
 }

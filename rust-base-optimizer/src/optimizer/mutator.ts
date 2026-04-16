@@ -53,31 +53,6 @@ function floorModel(tier: ModelTier): string {
   return `${tier.charAt(0).toUpperCase() + tier.slice(1)}FloorSquare`;
 }
 
-function makeWall(
-  objects: BaseObject[],
-  x: number,
-  y: number,
-  z: number,
-  rotDeg: number,
-  tier: ModelTier
-): BaseObject {
-  const modelName = wallModel(tier);
-  const meta = MODEL_REGISTRY[modelName]!;
-  return {
-    id: newId(),
-    builderModelName: modelName,
-    modelType: meta.category,
-    tier: meta.tier,
-    shape: meta.shape,
-    grade: meta.grade,
-    isStructural: meta.isStructural,
-    isInsert: meta.isInsert,
-    position: { x, y, z },
-    rotationDeg: rotDeg,
-  };
-  void objects; // unused param, kept for signature clarity
-}
-
 // ---------------------------------------------------------------------------
 // Individual mutations
 // ---------------------------------------------------------------------------
@@ -294,23 +269,18 @@ export function addFoundation(spec: BaseSpec): BaseSpec {
     rotationDeg: 0,
   });
 
-  // Add walls for exterior faces of the new foundation that don't already have
-  // a structural object in the slot.
-  // Update the found-set so we include the new foundation for neighbour checks.
-  const updatedFoundSet = new Set(foundSet);
-  updatedFoundSet.add(`${newFx},${newFz}`);
-
+  // Add walls for any face of the new foundation that doesn't already have a
+  // structural object in the slot. This covers exterior faces (no neighbour
+  // foundation beyond the slot) and also ensures completeness when the shared
+  // boundary with an existing neighbour was already walled.
   for (const dir of DIRS) {
-    const farX = newFx + dir.dx;
-    const farZ = newFz + dir.dz;
     const wallX = newFx + dir.wallDx;
     const wallZ = newFz + dir.wallDz;
 
-    // If a neighbour foundation exists on the far side, this is an interior face.
-    // If not, it's an exterior face that needs a wall.
-    const isInterior = updatedFoundSet.has(`${farX},${farZ}`);
-
-    // Regardless of interior/exterior, add a wall if none exists at the slot.
+    // If the slot already has a structural object skip it; otherwise add a wall.
+    // This covers both exterior faces (no neighbour) and interior faces (shared
+    // boundary with an existing foundation, which already has a wall from the
+    // neighbour's former exterior slot).
     if (!hasStructuralAt(cloned.objects, wallX, wallY, wallZ)) {
       const wallModelName = wallModel(tier);
       const wallMeta = MODEL_REGISTRY[wallModelName]!;
@@ -327,7 +297,6 @@ export function addFoundation(spec: BaseSpec): BaseSpec {
         rotationDeg: dir.rot,
       });
     }
-    void isInterior; // kept for documentation clarity
   }
 
   return cloned;
