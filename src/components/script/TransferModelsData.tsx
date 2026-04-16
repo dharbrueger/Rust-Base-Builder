@@ -11,7 +11,9 @@ import ProgressBar from "react-bootstrap/ProgressBar";
 import { useAudioPlayer } from "./AudioPlayer.tsx";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheck, faCopy, faDownload, faEraser, faFile, faKeyboard, faUpload } from "@fortawesome/free-solid-svg-icons"; //prettier-ignore
+import { faCheck, faCopy, faDownload, faEraser, faFile, faKeyboard, faUpload, faRobot } from "@fortawesome/free-solid-svg-icons"; //prettier-ignore
+
+const OPTIMIZER_URL = (import.meta as any).env?.VITE_OPTIMIZER_URL ?? "http://localhost:3001";
 
 interface ModelData {model: string, position: { x: number; y: number; z: number }, rotation: { x: number; y: number; z: number }} //prettier-ignore
 interface TransferModelsDataProps {canvas_models_data: { [id: string]: ModelData }, data_index: number} //prettier-ignore
@@ -38,6 +40,13 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
   const [base_export_custom_file_name, set_base_export_custom_file_name] = useState<string>("rust_base_builder_base");
   const inputRef = useRef(null);
   const fileUploadRef = useRef<any>(null);
+
+  // ── Optimizer state ──────────────────────────────────────────────────────
+  const [optimize_generations, set_optimize_generations] = useState<number>(20);
+  const [optimize_diverse_seeds, set_optimize_diverse_seeds] = useState<boolean>(true);
+  const [optimize_status, set_optimize_status] = useState<string>("Ready");
+  const [optimize_running, set_optimize_running] = useState<boolean>(false);
+  const [optimize_result_code, set_optimize_result_code] = useState<string>("");
 
   //[SectionNav] import data, export data
   //Section ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ ↓ Data Transfer (Import + Export) ↓ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -106,6 +115,13 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
     }
   }
 
+  /** Compresses canvas data and returns the base-64 code without touching export state. */
+  function GetCanvasCode(): string {
+    const data_string = JSON.stringify(canvas_models_data, null, 2);
+    const compressed = pako.deflate(data_string);
+    return btoa(String.fromCharCode(...compressed));
+  }
+
   function Base64DataDecompress(data: string) {
     const compressedBase64 = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
     const decompressed = pako.inflate(compressedBase64, { to: "string" });
@@ -165,7 +181,7 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
     dispatch(set_prebuilt_base_objects_set([]));
     set_loading_bar_info("Import the base");
     set_transfer_models_data_mode(mode);
-    set_loading_bar_info(`${mode === "import" ? "Import" : "Export"} the base`);
+    set_loading_bar_info(`${mode === "import" ? "Import" : mode === "export" ? "Export" : "AI Optimizer"} the base`);
     playSound("menu_sound");
   }
 
@@ -206,6 +222,89 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
   function ClearGeneratedBaseCode() {
     set_export_base_code("");
     set_loading_bar_info("Base code cleared");
+    playSound("buttons_sound");
+  }
+
+  // ── Optimizer handlers ───────────────────────────────────────────────────
+
+  async function HandleOptimizeWithAI() {
+    if (optimize_running) return;
+
+    playSound("buttons_sound");
+    set_optimize_running(true);
+    set_optimize_result_code("");
+    set_optimize_status("Optimizing… this may take a moment");
+
+    try {
+      // Use the canvas data as the evolutionary seed, or fall back to an
+      // auto-generated fresh base when the canvas is empty.
+      const canvasEmpty = Object.keys(canvas_models_data).length === 0;
+      let seedCode: string;
+
+      if (canvasEmpty) {
+        const genRes = await fetch(`${OPTIMIZER_URL}/generate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ width: 2, depth: 2, tier: "stone" }),
+        });
+        if (!genRes.ok) throw new Error("Could not generate a seed base from the optimizer server");
+        const genData = await genRes.json();
+        seedCode = genData.code;
+      } else {
+        seedCode = GetCanvasCode();
+      }
+
+      const res = await fetch(`${OPTIMIZER_URL}/optimize`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: seedCode,
+          generations: optimize_generations,
+          populationSize: 30,
+          topK: 5,
+          diverseSeeds: optimize_diverse_seeds,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error ?? res.statusText);
+      }
+
+      const result = await res.json();
+      const bestCode: string = result.code;
+      const fitness: number = result.fitnessScore ?? 0;
+      const sulfur: number = result.report?.sulfurToTC ?? 0;
+
+      set_optimize_result_code(bestCode);
+      set_optimize_status(
+        `Done! Fitness ${fitness.toFixed(2)} · ${sulfur.toLocaleString()} sulfur to TC`
+      );
+      set_loading_bar_info(`AI: ${sulfur.toLocaleString()} sulfur to TC`);
+      playSound("buttons_sound");
+    } catch (err: any) {
+      const msg: string =
+        String(err?.message ?? err).includes("fetch")
+          ? "Optimizer server offline – run: npm start (in rust-base-optimizer/)"
+          : String(err?.message ?? err);
+      set_optimize_status(`Error: ${msg}`);
+    } finally {
+      set_optimize_running(false);
+    }
+  }
+
+  function ApplyOptimizedBase() {
+    if (!optimize_result_code) return;
+    playSound("buttons_sound");
+    set_decompressed_data(Base64DataDecompress(optimize_result_code));
+    set_loading_bar_info("AI base applied – place it on the canvas");
+    HandleTransferModelsDataModeSwitch("import");
+  }
+
+  function CopyOptimizedCode() {
+    if (!optimize_result_code) return;
+    navigator.clipboard.writeText(optimize_result_code);
+    set_optimize_status((s) => s + " (copied!)");
     playSound("buttons_sound");
   }
 
@@ -394,6 +493,28 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
                 </div>
               </div>
             </div>
+
+            {/* ── AI Optimize inline button (export / code view) ── */}
+            <div className="transfer_models_data_ai_section_container">
+              <div
+                onClick={HandleOptimizeWithAI}
+                className={optimize_running ? "transfer_models_data_ai_button transfer_models_data_ai_button_running" : "transfer_models_data_ai_button"}
+              >
+                <FontAwesomeIcon icon={faRobot} style={{ marginRight: "0.4em" }} />
+                {optimize_running ? "optimizing…" : "optimize with AI"}
+              </div>
+
+              {optimize_result_code && (
+                <div className="transfer_models_data_ai_result_buttons">
+                  <div className="transfer_models_data_ai_mini_button" onClick={ApplyOptimizedBase}>
+                    apply
+                  </div>
+                  <div className="transfer_models_data_ai_mini_button" onClick={CopyOptimizedCode}>
+                    copy
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -417,6 +538,39 @@ const TransferModelsData: React.FC<TransferModelsDataProps> = ({ canvas_models_d
           </>
         )}
       </div>
+
+      {/* ── AI Optimizer status bar (always visible when optimize_status is set) ── */}
+      {transfer_models_data_mode === "export" && transfer_models_data_type === "code" && optimize_status !== "Ready" && (
+        <div className="transfer_models_data_ai_status_bar">
+          {optimize_status}
+        </div>
+      )}
+
+      {/* ── AI Optimizer settings panel ── */}
+      {transfer_models_data_mode === "export" && transfer_models_data_type === "code" && (
+        <div className="transfer_models_data_ai_settings_container">
+          <div className="transfer_models_data_ai_settings_row">
+            <span className="transfer_models_data_ai_label">generations</span>
+            <input
+              className="transfer_models_data_ai_number_input"
+              type="number"
+              min={5}
+              max={100}
+              value={optimize_generations}
+              onChange={(e) => set_optimize_generations(Math.max(5, Math.min(100, parseInt(e.target.value) || 20)))}
+            />
+          </div>
+          <div className="transfer_models_data_ai_settings_row">
+            <span className="transfer_models_data_ai_label">diverse seeds</span>
+            <input
+              type="checkbox"
+              checked={optimize_diverse_seeds}
+              onChange={(e) => set_optimize_diverse_seeds(e.target.checked)}
+              className="transfer_models_data_ai_checkbox"
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 };
