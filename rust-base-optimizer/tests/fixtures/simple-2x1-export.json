@@ -1,0 +1,13 @@
+{
+  "f1": {"model":"StoneFoundationSquareMid","position":{"x":-1,"y":0,"z":1},"rotation":{"x":0,"y":0,"z":0}},
+  "f2": {"model":"StoneFoundationSquareMid","position":{"x":1,"y":0,"z":1},"rotation":{"x":0,"y":0,"z":0}},
+  "w1": {"model":"StoneWallHigh","position":{"x":-1,"y":1,"z":0},"rotation":{"x":0,"y":0,"z":0}},
+  "w2": {"model":"StoneWallHigh","position":{"x":1,"y":1,"z":0},"rotation":{"x":0,"y":0,"z":0}},
+  "w3": {"model":"StoneWallHigh","position":{"x":-1,"y":1,"z":2},"rotation":{"x":0,"y":3.14159,"z":0}},
+  "w4": {"model":"StoneWallHigh","position":{"x":-2,"y":1,"z":1},"rotation":{"x":0,"y":1.5708,"z":0}},
+  "w5": {"model":"StoneWallHigh","position":{"x":0,"y":1,"z":1},"rotation":{"x":0,"y":1.5708,"z":0}},
+  "w6": {"model":"StoneWallHigh","position":{"x":2,"y":1,"z":1},"rotation":{"x":0,"y":4.7124,"z":0}},
+  "d1": {"model":"StoneDoorway","position":{"x":1,"y":1,"z":2},"rotation":{"x":0,"y":3.14159,"z":0}},
+  "d2": {"model":"MetalDoor","position":{"x":1,"y":1,"z":2},"rotation":{"x":0,"y":3.14159,"z":0}},
+  "tc": {"model":"ToolCupboard","position":{"x":-0.5,"y":1.05,"z":0.5},"rotation":{"x":0,"y":0,"z":0}}
+}
