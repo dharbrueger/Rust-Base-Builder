@@ -57,7 +57,9 @@ function makeObject(
  *
  * The generated base has:
  *   - width × depth foundations at y=0 (at odd-integer grid positions)
- *   - Walls around all exterior faces
+ *   - Walls on every exterior face of the perimeter
+ *   - Walls on every interior boundary between adjacent foundations
+ *     (creating fully enclosed compartments, not an open-plan layout)
  *   - One doorway (with MetalDoor) on the south face of the base
  *   - A ToolCupboard placed in the centre-most cell
  */
@@ -72,7 +74,6 @@ export function generateBaseSpec(
   const wallY = 1; // walls sit 1 unit above foundation y=0
 
   // Place foundations at odd-integer grid positions.
-  // Row 0 → x=1, row 1 → x=3, etc.  Column 0 → z=1, etc.
   for (let col = 0; col < width; col++) {
     for (let row = 0; row < depth; row++) {
       const fx = col * 2 + 1;
@@ -81,18 +82,22 @@ export function generateBaseSpec(
     }
   }
 
-  // Choose the doorway cell: south face of the first (col=0) foundation column.
+  // Choose the doorway cell on the south face.
   const doorwayCol = Math.floor(width / 2);
-  const doorwayZ = depth * 2; // south wall slot z = last foundation z + 1
+  const doorwayZ = depth * 2; // south exterior wall slot z
 
-  // Place walls around the exterior perimeter.
+  // --- Exterior perimeter walls ---
+
+  // North face (z=0 side): one wall per column.
   for (let col = 0; col < width; col++) {
     const fx = col * 2 + 1;
-    // North face (z=0 side).
     objects.push(makeObject(nextId("wn"), tierWall(tier), fx, wallY, 0, 0));
-    // South face.
-    const isSouthDoorway = col === doorwayCol;
-    if (isSouthDoorway) {
+  }
+
+  // South face: one wall (or doorway) per column.
+  for (let col = 0; col < width; col++) {
+    const fx = col * 2 + 1;
+    if (col === doorwayCol) {
       objects.push(makeObject(nextId("wd"), tierDoorway(tier), fx, wallY, doorwayZ, 180));
       objects.push(makeObject(nextId("door"), "MetalDoor", fx, wallY, doorwayZ, 180));
     } else {
@@ -100,15 +105,42 @@ export function generateBaseSpec(
     }
   }
 
+  // West face (x=0 side): one wall per row.
   for (let row = 0; row < depth; row++) {
     const fz = row * 2 + 1;
-    // West face (x=0 side).
     objects.push(makeObject(nextId("ww"), tierWall(tier), 0, wallY, fz, 270));
-    // East face.
+  }
+
+  // East face: one wall per row.
+  for (let row = 0; row < depth; row++) {
+    const fz = row * 2 + 1;
     objects.push(makeObject(nextId("we"), tierWall(tier), width * 2, wallY, fz, 90));
   }
 
-  // Inter-foundation internal walls (none for open-plan base — add doors only on exterior).
+  // --- Interior walls between adjacent foundations ---
+  // Every internal shared boundary gets a wall so that compartments are fully
+  // enclosed. Without these, the base looks like an open hall with disconnected
+  // outer walls and the topology treats all cells as one giant compartment.
+
+  // Walls between column col and col+1 (perpendicular to X-axis, facing E/W):
+  // wall at x = (col+1)*2 (even integer), z = row*2+1 (odd), rotation 90°.
+  for (let col = 0; col < width - 1; col++) {
+    for (let row = 0; row < depth; row++) {
+      const wx = (col + 1) * 2;
+      const wz = row * 2 + 1;
+      objects.push(makeObject(nextId("wi"), tierWall(tier), wx, wallY, wz, 90));
+    }
+  }
+
+  // Walls between row and row+1 (perpendicular to Z-axis, facing N/S):
+  // wall at x = col*2+1 (odd), z = (row+1)*2 (even), rotation 0°.
+  for (let col = 0; col < width; col++) {
+    for (let row = 0; row < depth - 1; row++) {
+      const wx = col * 2 + 1;
+      const wz = (row + 1) * 2;
+      objects.push(makeObject(nextId("wi"), tierWall(tier), wx, wallY, wz, 0));
+    }
+  }
 
   // ToolCupboard in the centre-most foundation.
   const tcCol = Math.floor(width / 2);
@@ -134,4 +166,40 @@ export function generateBaseSpec(
     metadata: { gameDataVersion: GAME_DATA_VERSION },
     objects,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Diverse seed population (Phase 2)
+// ---------------------------------------------------------------------------
+
+/** All rectangular footprint sizes used to seed the diverse population. */
+const SEED_SIZES: Array<[number, number]> = [
+  [1, 1],
+  [2, 1],
+  [1, 2],
+  [2, 2],
+  [3, 2],
+  [2, 3],
+  [3, 3],
+  [4, 2],
+  [2, 4],
+  [4, 4],
+];
+
+const SEED_TIERS: ModelTier[] = ["stone", "metal", "armored"];
+
+/**
+ * Generates a diverse population of seed specs across many footprint sizes and
+ * material tiers.  The evolutionary algorithm uses these as initial candidates
+ * so that it can discover which combination of size, layout, and material
+ * produces the strongest base rather than being locked into one shape.
+ */
+export function generateDiverseSeeds(): BaseSpec[] {
+  const seeds: BaseSpec[] = [];
+  for (const [w, d] of SEED_SIZES) {
+    for (const tier of SEED_TIERS) {
+      seeds.push(generateBaseSpec(w, d, tier));
+    }
+  }
+  return seeds;
 }
